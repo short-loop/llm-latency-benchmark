@@ -222,11 +222,10 @@ async def iteration_worker(
         await out_queue.put(sample)
 
 
-async def refill_rate_sem(rate_sem: asyncio.Semaphore):
+async def refill_rate_sem(rate_limit: int, rate_sem: asyncio.Semaphore):
     while True:
         await asyncio.sleep(60)
-        for _ in range(RATE_LIMIT - rate_sem._value):
-            print(f"\nVALUE: {rate_sem._value}")
+        for _ in range(rate_limit - rate_sem._value):
             rate_sem.release()
 
 
@@ -279,7 +278,7 @@ async def run_and_compute_metrics(
 
             # concurrency control and queue
             rate_sem = asyncio.Semaphore(rate_limit)
-            rate_ft = asyncio.ensure_future(refill_rate_sem(rate_sem=rate_sem))
+            rate_ft = asyncio.ensure_future(refill_rate_sem(rate_limit=rate_limit, rate_sem=rate_sem))
 
             sem = asyncio.Semaphore(concurrency_per_config)
             queue: asyncio.Queue = asyncio.Queue()
@@ -439,4 +438,4 @@ async def run_and_compute_metrics(
 # ---------- CLI ----------
 if __name__ == "__main__":
     # Tune concurrency_per_config according to your environment and API rate limits.
-    asyncio.run(run_and_compute_metrics(config_path="config.json", concurrency_per_config=3))
+    asyncio.run(run_and_compute_metrics(config_path="config.json", concurrency_per_config=5))
