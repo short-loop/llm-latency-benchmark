@@ -179,6 +179,7 @@ async def iteration_worker(
     api_version: str,
     deployment: str,
     instructions: str,
+    tools: List[ChatCompletionFunctionToolParam],
     simulation: List[str],
 ):
     """
@@ -195,7 +196,7 @@ async def iteration_worker(
 
         # run the blocking call: hold semaphore for the duration of the request
         async with sem:
-            fn = partial(call_openai_blocking_messages, api_key, api_endpoint, api_version, deployment, messages)
+            fn = partial(call_openai_blocking_messages, api_key, api_endpoint, api_version, deployment, messages, tools)
             duration_and_text = await loop.run_in_executor(None, fn)
 
         # duration_and_text is (duration_s_or_None, assistant_text_or_None)
@@ -247,6 +248,7 @@ async def run_and_compute_metrics(
             deployment = llm.get("azure_deployment", "")
 
             instructions = config.get("instructions", "")
+            tools = config.get("tools", [])
             simulation = config.get("simulation", [])
             if not simulation:
                 print(f"[warning] config {name} has empty simulation; skipping")
@@ -280,6 +282,7 @@ async def run_and_compute_metrics(
                         deployment=deployment,
                         instructions=instructions,
                         simulation=simulation,
+                        tools=tools,
                     )
                 )
                 for i in range(count)
