@@ -27,7 +27,7 @@ from openai.types.chat import ChatCompletionFunctionToolParam
 from progress.bar import ChargingBar
 
 
-RATE_LIMIT = 15
+RATE_LIMIT = 150
 
 # ---------- Utilities ----------
 def percentile(sorted_samples: List[float], p: float) -> float:
