@@ -27,6 +27,8 @@ from openai.types.chat import ChatCompletionFunctionToolParam
 from progress.bar import ChargingBar
 
 
+RATE_LIMIT = 15
+
 # ---------- Utilities ----------
 def percentile(sorted_samples: List[float], p: float) -> float:
     """
@@ -68,7 +70,7 @@ def call_openai_blocking_messages(
         import openai  # local import (safer for threadpool worker)
     except Exception as exc:
         print(f"[call_openai_blocking_messages] error importing openai: {exc}")
-        return (None, None)
+        return None, None
 
     try:
         client = openai.AzureOpenAI(
@@ -79,7 +81,7 @@ def call_openai_blocking_messages(
         )
     except Exception as exc:
         print(f"[call_openai_blocking_messages] error creating AzureOpenAI client: {exc}")
-        return (None, None)
+        return None, None
 
     start_ts = time.time()
     first_chunk_ts: Optional[float] = None
@@ -164,7 +166,7 @@ def call_openai_blocking_messages(
     if assistant_text == "":
         assistant_text = None
 
-    return (first_chunk_ts - start_ts, assistant_text)
+    return first_chunk_ts - start_ts, assistant_text
 
 
 # ---------- Worker: one iteration (sequential turns) ----------
@@ -172,6 +174,7 @@ async def iteration_worker(
     config_name: str,
     iteration_id: int,
     sem: asyncio.Semaphore,
+    rate_sem: asyncio.Semaphore,
     loop: asyncio.AbstractEventLoop,
     out_queue: asyncio.Queue,
     api_key: str,
@@ -195,6 +198,7 @@ async def iteration_worker(
         messages = [{"role": "system", "content": instructions}] + prior_history + [{"role": "user", "content": user_turn}]
 
         # run the blocking call: hold semaphore for the duration of the request
+        await rate_sem.acquire() # do not release
         async with sem:
             fn = partial(call_openai_blocking_messages, api_key, api_endpoint, api_version, deployment, messages, tools)
             duration_and_text = await loop.run_in_executor(None, fn)
@@ -218,6 +222,13 @@ async def iteration_worker(
         await out_queue.put(sample)
 
 
+async def refill_rate_sem(rate_sem: asyncio.Semaphore):
+    while True:
+        await asyncio.sleep(60)
+        for _ in range(RATE_LIMIT - rate_sem._value):
+            rate_sem.release()
+
+
 # ---------- Main runner ----------
 async def run_and_compute_metrics(
     config_path: str = "config.json",
@@ -236,6 +247,9 @@ async def run_and_compute_metrics(
 
     # We'll write samples incrementally to a .jsonl file while consuming from queue
     samples_fh = open(out_samples_path, "w", encoding="utf-8")
+
+    rate_sem = asyncio.Semaphore(RATE_LIMIT)
+    asyncio.ensure_future(refill_rate_sem(rate_sem=rate_sem))
 
     try:
         for config in configs:
@@ -274,6 +288,7 @@ async def run_and_compute_metrics(
                         config_name=name,
                         iteration_id=i,
                         sem=sem,
+                        rate_sem=rate_sem,
                         loop=loop,
                         out_queue=queue,
                         api_key=api_key,
