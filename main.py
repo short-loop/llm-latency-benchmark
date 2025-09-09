@@ -226,6 +226,7 @@ async def refill_rate_sem(rate_sem: asyncio.Semaphore):
     while True:
         await asyncio.sleep(60)
         for _ in range(RATE_LIMIT - rate_sem._value):
+            print(f"\nVALUE: {rate_sem._value}")
             rate_sem.release()
 
 
@@ -248,8 +249,6 @@ async def run_and_compute_metrics(
     # We'll write samples incrementally to a .jsonl file while consuming from queue
     samples_fh = open(out_samples_path, "w", encoding="utf-8")
 
-    rate_sem = asyncio.Semaphore(RATE_LIMIT)
-    asyncio.ensure_future(refill_rate_sem(rate_sem=rate_sem))
 
     try:
         for config in configs:
@@ -260,6 +259,7 @@ async def run_and_compute_metrics(
             api_key = llm.get("azure_api_key", "")
             api_endpoint = llm.get("azure_endpoint", "")
             deployment = llm.get("azure_deployment", "")
+            rate_limit = llm.get("rate_limit", RATE_LIMIT)
 
             instructions = config.get("instructions", "")
             tools = config.get("tools", [])
@@ -278,6 +278,9 @@ async def run_and_compute_metrics(
             per_turn_failures: Dict[int, int] = {i: 0 for i in range(num_turns)}
 
             # concurrency control and queue
+            rate_sem = asyncio.Semaphore(rate_limit)
+            rate_ft = asyncio.ensure_future(refill_rate_sem(rate_sem=rate_sem))
+
             sem = asyncio.Semaphore(concurrency_per_config)
             queue: asyncio.Queue = asyncio.Queue()
 
@@ -330,6 +333,7 @@ async def run_and_compute_metrics(
 
             # ensure all iteration workers completed
             await asyncio.gather(*workers, return_exceptions=True)
+            rate_ft.cancel()
 
             # compute per-turn metrics
             per_turn_metrics: Dict[str, Any] = {}
