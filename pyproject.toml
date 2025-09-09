@@ -1,0 +1,9 @@
+[project]
+name = "llm-latency-benchmark"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.9"
+dependencies = [
+    "openai>=1.107.0",
+    "progress>=1.6.1",
+]
