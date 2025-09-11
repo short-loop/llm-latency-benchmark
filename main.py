@@ -17,6 +17,7 @@ Notes:
 from __future__ import annotations
 
 import asyncio
+import argparse
 import json
 import math
 import time
@@ -437,5 +438,9 @@ async def run_and_compute_metrics(
 
 # ---------- CLI ----------
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", type=str, default="config.json", help="Path to config.json")
+    parser.add_argument("--concurrency", type=int, default=5, help="Number of concurrent iterations per config")
+    args = parser.parse_args()
     # Tune concurrency_per_config according to your environment and API rate limits.
-    asyncio.run(run_and_compute_metrics(config_path="config.json", concurrency_per_config=5))
+    asyncio.run(run_and_compute_metrics(config_path=args.config, concurrency_per_config=args.concurrency))
