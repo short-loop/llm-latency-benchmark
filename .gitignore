@@ -1,5 +1,4 @@
 .idea/
 latency_metrics.json
 samples.jsonl
-config.json
-config*.json
+*.json*
